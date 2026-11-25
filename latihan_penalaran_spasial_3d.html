@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Penalaran Spasial 3D — Latihan Kubus Satuan</title>
+  
+  <!-- Tipografi Editorial & Monospace -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Instrument Sans"', 'system-ui', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          },
+          colors: {
+            paper: '#F6F5F0',
+            ink: '#161615',
+            obsidian: '#111110',
+            charcoal: '#1A1A18',
+            terracotta: '#D94E1F',
+          }
+        }
+      }
+    }
+  </script>
+  
+  <!-- React 18 & ReactDOM -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <!-- Three.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <style>
+    * { -webkit-tap-highlight-color: transparent; }
+    html, body { overscroll-behavior: none; }
+    .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(120, 118, 110, 0.25); border-radius: 4px; }
+    .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); }
+  </style>
+</head>
+<body class="bg-paper text-ink dark:bg-obsidian dark:text-[#F2F1ED] overflow-hidden antialiased transition-colors duration-200 select-none">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useMemo, useCallback } = React;
+
+    // --- PALET WARNA LAPISAN VIBRANT ---
+    const LAYER_PALETTE = [
+      { hex: 0x6366f1, css: '#6366f1', label: 'Lapis 1 (Dasar)' },
+      { hex: 0x10b981, css: '#10b981', label: 'Lapis 2' },
+      { hex: 0xf59e0b, css: '#f59e0b', label: 'Lapis 3' },
+      { hex: 0xef4444, css: '#ef4444', label: 'Lapis 4' },
+      { hex: 0x8b5cf6, css: '#8b5cf6', label: 'Lapis 5' },
+      { hex: 0xec4899, css: '#ec4899', label: 'Lapis 6' },
+      { hex: 0x06b6d4, css: '#06b6d4', label: 'Lapis 7' }
+    ];
+
+    // --- KOMPONEN IKON MINIMALIS ---
+    const Ikon = ({ nama, ukuran = 18, className = "" }) => {
+      const daftarIkon = {
+        kiri: <polyline points="15 18 9 12 15 6" />,
+        kanan: <polyline points="9 18 15 12 9 6" />,
+        ulang: <><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" /></>,
+        benar: <><polyline points="20 6 9 17 4 12" /></>,
+        salah: <><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></>,
+        putar: <><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /></>,
+        jeda: <><line x1="10" y1="5" x2="10" y2="19" /><line x1="14" y1="5" x2="14" y2="19" /></>,
+        kotak: <><rect width="7" height="7" x="3" y="3" rx="1" /><rect width="7" height="7" x="14" y="3" rx="1" /><rect width="7" height="7" x="14" y="14" rx="1" /><rect width="7" height="7" x="3" y="14" rx="1" /></>,
+        tutup: <><path d="M18 6 6 18" /><path d="m6 6 12 12" /></>,
+        matahari: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" /></>,
+        bulan: <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />,
+        geser: <><path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20" /></>
+      };
+      return (
+        <svg xmlns="http://www.w3.org/2000/svg" width={ukuran} height={ukuran} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+          {daftarIkon[nama]}
+        </svg>
+      );
+    };
+
+    // --- GENERATOR SOAL 3D ACAK & ANTI-DUPLIKAT ---
+    const buatBalokPadat = (p, l, t, geser = { x: 0, y: 0, z: 0 }) => {
+      const daftarKubus = [];
+      for (let x = 0; x < p; x++) {
+        for (let y = 0; y < l; y++) {
+          for (let z = 0; z < t; z++) {
+            daftarKubus.push({ x: x + geser.x, y: y + geser.y, z: z + geser.z });
+          }
+        }
+      }
+      return daftarKubus;
+    };
+
+    const buatTandaBentuk = (kubus) => {
+      const minX = Math.min(...kubus.map(c => c.x));
+      const minY = Math.min(...kubus.map(c => c.y));
+      const minZ = Math.min(...kubus.map(c => c.z));
+      return kubus
+        .map(c => `${c.x - minX},${c.y - minY},${c.z - minZ}`)
+        .sort()
+        .join('|');
+    };
+
+    const buatPilihanJawaban = (jumlahBenar) => {
+      const pilihan = new Set([jumlahBenar]);
+      const selisih = [-3, -2, -1, 1, 2, 3, 4];
+      while (pilihan.size < 4) {
+        const acak = selisih[Math.floor(Math.random() * selisih.length)];
+        const kandidat = jumlahBenar + acak;
+        if (kandidat > 0) pilihan.add(kandidat);
+      }
+      return Array.from(pilihan).sort(() => Math.random() - 0.5).map(String);
+    };
+
+    const hasilkanDaftarSoal = (totalSoal = 20) => {
+      const daftarSoal = [];
+      const jejakBentuk = new Set();
+      let percobaan = 0;
+
+      while (daftarSoal.length < totalSoal && percobaan < 600) {
+        percobaan++;
+        const tingkat = daftarSoal.length;
+        const tipe = Math.floor(Math.random() * 5);
+        let kubus = [];
+        let pertanyaan = "";
+        let pembahasan = "";
+
+        if (tipe === 0) {
+          const p = Math.floor(Math.random() * 4) + 2;
+          const l = Math.floor(Math.random() * 3) + 1;
+          const t = Math.floor(Math.random() * (tingkat > 10 ? 3 : 2)) + 1;
+          kubus = buatBalokPadat(p, l, t);
+          pertanyaan = `Hitung jumlah seluruh kubus satuan pada susunan balok berukuran ${p} × ${l} × ${t} berikut.`;
+          pembahasan = `Rumus volume balok: Panjang (${p}) × Lebar (${l}) × Tinggi (${t}) = ${kubus.length} kubus satuan.`;
+        } else if (tipe === 1) {
+          const anakTangga = Math.floor(Math.random() * 3) + 3;
+          const lebar = Math.floor(Math.random() * 2) + 1;
+          const rincian = [];
+          for (let s = 0; s < anakTangga; s++) {
+            const tinggi = anakTangga - s;
+            rincian.push(tinggi * lebar);
+            for (let z = 0; z < tinggi; z++) {
+              for (let y = 0; y < lebar; y++) {
+                kubus.push({ x: s, y, z });
+              }
+            }
+          }
+          pertanyaan = `Berapa total kubus satuan yang membentuk bangun anak tangga ini?`;
+          pembahasan = `Jumlahkan tiap kolom dari bagian tertinggi ke terendah: ${rincian.join(' + ')} = ${kubus.length} kubus satuan.`;
+        } else if (tipe === 2) {
+          const p = Math.floor(Math.random() * 2) + 3;
+          const l = Math.floor(Math.random() * 2) + 3;
+          const t = Math.floor(Math.random() * 2) + 1;
+          const utuh = buatBalokPadat(p, l, t);
+          const potongX = Math.floor(Math.random() * 2) + 1;
+          const potongY = Math.floor(Math.random() * 2) + 1;
+          kubus = utuh.filter(c => !(c.x >= p - potongX && c.y >= l - potongY && c.z === t - 1));
+          const terpotong = utuh.length - kubus.length;
+          pertanyaan = `Balok berukuran ${p} × ${l} × ${t} ini dikurangi ${terpotong} kubus pada bagian sudut atasnya. Berapa sisa kubusnya?`;
+          pembahasan = `Balok utuh (${p} × ${l} × ${t} = ${utuh.length}) dikurangi bagian yang hilang (${terpotong}) = ${kubus.length} kubus satuan.`;
+        } else if (tipe === 3) {
+          const alas = Math.floor(Math.random() * 2) + 3;
+          kubus = [
+            ...buatBalokPadat(alas, alas, 1),
+            ...buatBalokPadat(alas - 1, alas - 1, 1, { x: 0, y: 0, z: 1 })
+          ];
+          if (tingkat >= 10 && Math.random() > 0.4) {
+            kubus.push(...buatBalokPadat(alas - 2, alas - 2, 1, { x: 0, y: 0, z: 2 }));
+            pertanyaan = `Hitung total kubus pada menara 3 tingkat ini, termasuk bagian dalam yang tertindih.`;
+            pembahasan = `Lapis 1 (${alas * alas}) + Lapis 2 (${(alas - 1) ** 2}) + Lapis 3 (${(alas - 2) ** 2}) = ${kubus.length} kubus satuan.`;
+          } else {
+            pertanyaan = `Menara 2 tingkat dengan alas ${alas} × ${alas} dan tingkat atas ${alas - 1} × ${alas - 1}. Berapa total kubusnya?`;
+            pembahasan = `Lapis bawah (${alas * alas}) + Lapis atas (${(alas - 1) ** 2}) = ${kubus.length} kubus satuan.`;
+          }
+        } else {
+          const ukuranBidang = tingkat > 12 ? 4 : 3;
+          const tinggiMaks = tingkat > 8 ? 4 : 3;
+          const targetKubus = Math.floor(Math.random() * 8) + (tingkat > 10 ? 10 : 6);
+          const tinggiKolom = Array.from({ length: ukuranBidang }, () => Array(ukuranBidang).fill(0));
+          
+          let cx = Math.floor(ukuranBidang / 2);
+          let cy = Math.floor(ukuranBidang / 2);
+          tinggiKolom[cx][cy] = 1;
+          let terisi = 1;
+
+          while (terisi < targetKubus) {
+            const arah = [[1, 0], [-1, 0], [0, 1], [0, -1], [0, 0]];
+            const [dx, dy] = arah[Math.floor(Math.random() * arah.length)];
+            const nx = Math.max(0, Math.min(ukuranBidang - 1, cx + dx));
+            const ny = Math.max(0, Math.min(ukuranBidang - 1, cy + dy));
+            if (tinggiKolom[nx][ny] < tinggiMaks) {
+              tinggiKolom[nx][ny]++;
+              terisi++;
+            }
+            cx = nx;
+            cy = ny;
+          }
+
+          const hitungPerLapis = Array(tinggiMaks).fill(0);
+          for (let x = 0; x < ukuranBidang; x++) {
+            for (let y = 0; y < ukuranBidang; y++) {
+              for (let z = 0; z < tinggiKolom[x][y]; z++) {
+                kubus.push({ x, y, z });
+                hitungPerLapis[z]++;
+              }
+            }
+          }
+          const rincianLapis = hitungPerLapis
+            .filter(n => n > 0)
+            .map((n, idx) => `Lapis ${idx + 1} (${n})`);
+          pertanyaan = `Putar objek 3D ini dari berbagai sisi, lalu hitung total kubus penyusunnya (termasuk yang tersembunyi di bawah).`;
+          pembahasan = `Rincian tiap tingkatan warna: ${rincianLapis.join(' + ')} = ${kubus.length} kubus satuan.`;
+        }
+
+        const tanda = buatTandaBentuk(kubus);
+        if (kubus.length >= 4 && !jejakBentuk.has(tanda)) {
+          jejakBentuk.add(tanda);
+          daftarSoal.push({
+            id: daftarSoal.length + 1,
+            pertanyaan,
+            pilihan: buatPilihanJawaban(kubus.length),
+            jawabanBenar: String(kubus.length),
+            kubus,
+            pembahasan
+          });
+        }
+      }
+      return daftarSoal;
+    };
+
+    // --- KOMPONEN PANGGUNG 3D (TANPA GRID BAWAH) ---
+    const PanggungKubus3D = ({ kubus, putarOtomatis, modeGelap, sudutKamera, saatGeserManual }) => {
+      const wadahRef = useRef(null);
+      const rendererRef = useRef(null);
+      const sceneRef = useRef(null);
+      const kameraRef = useRef(null);
+      const grupKubusRef = useRef(null);
+      const putarRef = useRef(putarOtomatis);
+      const [galatWebGL, setGalatWebGL] = useState(false);
+
+      useEffect(() => { putarRef.current = putarOtomatis; }, [putarOtomatis]);
+
+      // Sinkronisasi warna latar ruang 3D dengan tema Terang/Gelap
+      useEffect(() => {
+        if (!sceneRef.current || !window.THREE) return;
+        sceneRef.current.background = new window.THREE.Color(modeGelap ? 0x141413 : 0xEFECE6);
+        if (grupKubusRef.current) perbaruiSusunanKubus();
+      }, [modeGelap]);
+
+      // Perubahan sudut pandang kamera
+      useEffect(() => {
+        if (!grupKubusRef.current || !sudutKamera) return;
+        if (sudutKamera.tipe === 'isometrik') {
+          grupKubusRef.current.rotation.set(0.52, 0.78, 0);
+        } else if (sudutKamera.tipe === 'atas') {
+          grupKubusRef.current.rotation.set(Math.PI / 2 - 0.04, 0, 0);
+        } else if (sudutKamera.tipe === 'depan') {
+          grupKubusRef.current.rotation.set(0.08, 0, 0);
+        }
+      }, [sudutKamera]);
+
+      useEffect(() => {
+        let idAnimasi;
+        let pengamatUkuran;
+        if (!wadahRef.current || !window.THREE) return;
+
+        try {
+          const lebar = wadahRef.current.clientWidth || 400;
+          const tinggi = wadahRef.current.clientHeight || 300;
+          const THREE = window.THREE;
+
+          const scene = new THREE.Scene();
+          scene.background = new THREE.Color(modeGelap ? 0x141413 : 0xEFECE6);
+          sceneRef.current = scene;
+
+          const kamera = new THREE.PerspectiveCamera(40, lebar / tinggi, 0.1, 1000);
+          kamera.position.set(11.5, 9.5, 11.5);
+          kamera.lookAt(0, 0, 0);
+          kameraRef.current = kamera;
+
+          const renderer = new THREE.WebGLRenderer({ antialias: true });
+          renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+          renderer.setSize(lebar, tinggi);
+          rendererRef.current = renderer;
+          wadahRef.current.appendChild(renderer.domElement);
+
+          // Pencahayaan studio lembut tanpa grid lantai
+          scene.add(new THREE.AmbientLight(0xffffff, 0.82));
+          const cahayaUtama = new THREE.DirectionalLight(0xffffff, 0.55);
+          cahayaUtama.position.set(12, 22, 14);
+          scene.add(cahayaUtama);
+          const cahayaIsi = new THREE.DirectionalLight(0xffffff, 0.25);
+          cahayaIsi.position.set(-12, -8, -10);
+          scene.add(cahayaIsi);
+
+          const grup = new THREE.Group();
+          scene.add(grup);
+          grupKubusRef.current = grup;
+
+          perbaruiSusunanKubus();
+
+          let sedangGeser = false;
+          let posisiAwal = { x: 0, y: 0 };
+
+          const mulaiGeser = (e) => {
+            sedangGeser = true;
+            const clientX = e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0].clientX);
+            const clientY = e.clientY !== undefined ? e.clientY : (e.touches && e.touches[0].clientY);
+            posisiAwal = { x: clientX, y: clientY };
+            if (saatGeserManual) saatGeserManual();
+          };
+
+          const saatGeser = (e) => {
+            if (!sedangGeser) return;
+            if (e.cancelable) e.preventDefault();
+            const x = e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0].clientX);
+            const y = e.clientY !== undefined ? e.clientY : (e.touches && e.touches[0].clientY);
+            grup.rotation.y += (x - posisiAwal.x) * 0.011;
+            grup.rotation.x += (y - posisiAwal.y) * 0.011;
+            posisiAwal = { x, y };
+          };
+
+          const selesaiGeser = () => { sedangGeser = false; };
+
+          const elemen = wadahRef.current;
+          elemen.addEventListener('mousedown', mulaiGeser);
+          window.addEventListener('mousemove', saatGeser);
+          window.addEventListener('mouseup', selesaiGeser);
+          elemen.addEventListener('touchstart', mulaiGeser, { passive: false });
+          elemen.addEventListener('touchmove', saatGeser, { passive: false });
+          window.addEventListener('touchend', selesaiGeser);
+
+          const jalankanAnimasi = () => {
+            idAnimasi = requestAnimationFrame(jalankanAnimasi);
+            if (putarRef.current && !sedangGeser && grupKubusRef.current) {
+              grupKubusRef.current.rotation.y += 0.0065;
+            }
+            if (rendererRef.current && sceneRef.current && kameraRef.current) {
+              rendererRef.current.render(sceneRef.current, kameraRef.current);
+            }
+          };
+          jalankanAnimasi();
+
+          const saatUbahUkuran = () => {
+            if (!wadahRef.current || !kameraRef.current || !rendererRef.current) return;
+            const w = wadahRef.current.clientWidth;
+            const h = wadahRef.current.clientHeight;
+            if (w === 0 || h === 0) return;
+            kameraRef.current.aspect = w / h;
+            kameraRef.current.updateProjectionMatrix();
+            rendererRef.current.setSize(w, h);
+          };
+
+          if (typeof ResizeObserver !== 'undefined') {
+            pengamatUkuran = new ResizeObserver(saatUbahUkuran);
+            pengamatUkuran.observe(elemen);
+          }
+          window.addEventListener('resize', saatUbahUkuran);
+
+          return () => {
+            cancelAnimationFrame(idAnimasi);
+            if (pengamatUkuran) pengamatUkuran.disconnect();
+            elemen.removeEventListener('mousedown', mulaiGeser);
+            window.removeEventListener('mousemove', saatGeser);
+            window.removeEventListener('mouseup', selesaiGeser);
+            elemen.removeEventListener('touchstart', mulaiGeser);
+            elemen.removeEventListener('touchmove', saatGeser);
+            window.removeEventListener('touchend', selesaiGeser);
+            window.removeEventListener('resize', saatUbahUkuran);
+            if (rendererRef.current && wadahRef.current) {
+              wadahRef.current.innerHTML = "";
+              rendererRef.current.dispose();
+            }
+          };
+        } catch (err) {
+          setGalatWebGL(true);
+        }
+      }, []);
+
+      useEffect(() => { if (grupKubusRef.current) perbaruiSusunanKubus(); }, [kubus]);
+
+      const perbaruiSusunanKubus = () => {
+        const THREE = window.THREE;
+        if (!THREE || !grupKubusRef.current) return;
+        const grup = grupKubusRef.current;
+        while (grup.children.length > 0) grup.remove(grup.children[0]);
+
+        const geometri = new THREE.BoxGeometry(0.96, 0.96, 0.96);
+        let minX = 0, maxX = 0, minY = 0, maxY = 0, minZ = 0, maxZ = 0;
+        kubus.forEach(c => {
+          minX = Math.min(minX, c.x); maxX = Math.max(maxX, c.x);
+          minY = Math.min(minY, c.y); maxY = Math.max(maxY, c.y);
+          minZ = Math.min(minZ, c.z); maxZ = Math.max(maxZ, c.z);
+        });
+        const cx = (minX + maxX) / 2;
+        const cy = (minY + maxY) / 2;
+        const cz = (minZ + maxZ) / 2;
+
+        kubus.forEach((posisi) => {
+          const indeksLapis = Math.round(posisi.z);
+          const warna = LAYER_PALETTE[indeksLapis % LAYER_PALETTE.length].hex;
+          const kubusMesh = new THREE.Mesh(
+            geometri,
+            new THREE.MeshPhongMaterial({ color: warna, shininess: 65 })
+          );
+          kubusMesh.position.set(posisi.x - cx, posisi.z - cz, posisi.y - cy);
+          const garisTepi = new THREE.LineSegments(
+            new THREE.EdgesGeometry(geometri),
+            new THREE.LineBasicMaterial({
+              color: modeGelap ? 0x111110 : 0xFFFFFF,
+              transparent: true,
+              opacity: modeGelap ? 0.5 : 0.65
+            })
+          );
+          kubusMesh.add(garisTepi);
+          grup.add(kubusMesh);
+        });
+        grup.rotation.set(0.52, 0.78, 0);
+      };
+
+      return (
+        <div className="relative w-full h-full">
+          {galatWebGL ? (
+            <div className="w-full h-full flex items-center justify-center p-6 text-center text-xs text-stone-500">
+              Tampilan 3D tidak didukung oleh peramban perangkat ini.
+            </div>
+          ) : (
+            <div ref={wadahRef} className="w-full h-full cursor-grab active:cursor-grabbing touch-none" />
+          )}
+        </div>
+      );
+    };
+
+    // --- KOMPONEN MODAL DAFTAR SOAL ---
+    const ModalDaftarSoal = ({ buka, tutup, daftarSoal, indeksAktif, jawabanUser, pilihSoal }) => {
+      useEffect(() => {
+        if (!buka) return;
+        const saatEsc = (e) => { if (e.key === 'Escape') tutup(); };
+        window.addEventListener('keydown', saatEsc);
+        return () => window.removeEventListener('keydown', saatEsc);
+      }, [buka, tutup]);
+
+      if (!buka) return null;
+      const jumlahTerjawab = Object.keys(jawabanUser).length;
+
+      return (
+        <div
+          onClick={tutup}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white dark:bg-charcoal border border-[#E2E0D8] dark:border-[#2C2C29] w-full max-w-md rounded-2xl p-5 sm:p-6 shadow-2xl"
+          >
+            <div className="flex items-center justify-between pb-4 mb-5 border-b border-[#E8E6DF] dark:border-[#2A2A27]">
+              <div>
+                <h2 className="text-base font-bold tracking-tight">Peta Nomor Soal</h2>
+                <p className="text-xs text-stone-500 dark:text-stone-400 font-mono mt-0.5">
+                  {jumlahTerjawab} dari 20 soal selesai
+                </p>
+              </div>
+              <button
+                onClick={tutup}
+                aria-label="Tutup daftar soal"
+                className="p-2 rounded-lg border border-[#E2E0D8] dark:border-[#2C2C29] hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
+              >
+                <Ikon nama="tutup" ukuran={16} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-5 gap-2 max-h-[60vh] overflow-y-auto custom-scrollbar">
+              {daftarSoal.map((item, i) => {
+                const sudahDijawab = jawabanUser[i] !== undefined;
+                const benar = jawabanUser[i] === item.jawabanBenar;
+                let gayaKotak = "bg-paper dark:bg-obsidian border-[#DFDDD4] dark:border-[#2C2C29] text-stone-600 dark:text-stone-400 hover:border-ink dark:hover:border-stone-400";
+
+                if (indeksAktif === i) {
+                  gayaKotak = "bg-ink dark:bg-[#F2F1ED] border-ink dark:border-[#F2F1ED] text-white dark:text-obsidian";
+                } else if (sudahDijawab) {
+                  gayaKotak = benar
+                    ? "bg-emerald-50 dark:bg-emerald-950/60 border-emerald-600/50 text-emerald-700 dark:text-emerald-400"
+                    : "bg-red-50 dark:bg-red-950/60 border-red-600/50 text-red-700 dark:text-red-400";
+                }
+
+                return (
+                  <button
+                    key={i}
+                    onClick={() => pilihSoal(i)}
+                    className={`h-11 rounded-lg border font-mono text-sm font-bold transition-colors ${gayaKotak}`}
+                  >
+                    {String(i + 1).padStart(2, '0')}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-5 pt-4 border-t border-[#E8E6DF] dark:border-[#2A2A27] flex items-center justify-between text-[11px] font-medium text-stone-500 dark:text-stone-400">
+              <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-xs bg-ink dark:bg-[#F2F1ED]" /> Aktif</span>
+              <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-xs bg-emerald-600" /> Benar</span>
+              <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-xs bg-red-600" /> Salah</span>
+              <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-xs border border-stone-400" /> Kosong</span>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    // --- KOMPONEN UTAMA APLIKASI REACT ---
+    const AplikasiSpasial3D = () => {
+      const [tema, setTema] = useState(() => {
+        if (typeof window !== 'undefined' && window.matchMedia) {
+          return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'gelap' : 'terang';
+        }
+        return 'terang';
+      });
+      const modeGelap = tema === 'gelap';
+
+      useEffect(() => {
+        document.documentElement.classList.toggle('dark', modeGelap);
+      }, [modeGelap]);
+
+      const [daftarSoal, setDaftarSoal] = useState(() => hasilkanDaftarSoal(20));
+      const [indeksSoal, setIndeksSoal] = useState(0);
+      const [jawabanUser, setJawabanUser] = useState({});
+      const [tampilHasil, setTampilHasil] = useState(false);
+      const [putarOtomatis, setPutarOtomatis] = useState(true);
+      const [bukaModalSoal, setBukaModalSoal] = useState(false);
+      const [sudutKamera, setSudutKamera] = useState({ tipe: 'isometrik', waktu: 0 });
+      const [sudutAktif, setSudutAktif] = useState('isometrik');
+      const panelSoalRef = useRef(null);
+
+      const soalAktif = daftarSoal[indeksSoal];
+      const sudahDijawab = jawabanUser[indeksSoal] !== undefined;
+      const jawabanTepat = jawabanUser[indeksSoal] === soalAktif.jawabanBenar;
+
+      const totalSkor = useMemo(() => {
+        return Object.keys(jawabanUser).reduce((total, idx) => {
+          return total + (jawabanUser[idx] === daftarSoal[idx].jawabanBenar ? 1 : 0);
+        }, 0);
+      }, [jawabanUser, daftarSoal]);
+
+      const lapisTertinggi = useMemo(() => {
+        return Math.max(...soalAktif.kubus.map(c => c.z)) + 1;
+      }, [soalAktif]);
+
+      // Gulir panel soal kembali ke atas setiap berpindah nomor soal
+      useEffect(() => {
+        if (panelSoalRef.current) {
+          panelSoalRef.current.scrollTop = 0;
+        }
+        setSudutAktif('isometrik');
+      }, [indeksSoal]);
+
+      const pilihJawaban = useCallback((opsi) => {
+        if (sudahDijawab) return;
+        setJawabanUser(prev => ({ ...prev, [indeksSoal]: opsi }));
+      }, [sudahDijawab, indeksSoal]);
+
+      const soalBerikutnya = useCallback(() => {
+        if (indeksSoal < 19) {
+          setIndeksSoal(prev => prev + 1);
+        } else {
+          setTampilHasil(true);
+        }
+      }, [indeksSoal]);
+
+      const soalSebelumnya = useCallback(() => {
+        if (indeksSoal > 0) {
+          setIndeksSoal(prev => prev - 1);
+        }
+      }, [indeksSoal]);
+
+      const ulangiDenganSoalBaru = () => {
+        setDaftarSoal(hasilkanDaftarSoal(20));
+        setJawabanUser({});
+        setIndeksSoal(0);
+        setTampilHasil(false);
+        setPutarOtomatis(true);
+        setSudutAktif('isometrik');
+      };
+
+      // Pintasan papan ketik
+      useEffect(() => {
+        const tanganiTombol = (e) => {
+          if (tampilHasil || bukaModalSoal) return;
+          if (e.key === 'ArrowRight') soalBerikutnya();
+          else if (e.key === 'ArrowLeft') soalSebelumnya();
+          else if (e.key === ' ') {
+            e.preventDefault();
+            setPutarOtomatis(p => !p);
+          } else if (!sudahDijawab) {
+            const petaTombol = { '1': 0, 'a': 0, '2': 1, 'b': 1, '3': 2, 'c': 2, '4': 3, 'd': 3 };
+            const idxOpsi = petaTombol[e.key.toLowerCase()];
+            if (idxOpsi !== undefined && soalAktif.pilihan[idxOpsi]) {
+              pilihJawaban(soalAktif.pilihan[idxOpsi]);
+            }
+          }
+        };
+        window.addEventListener('keydown', tanganiTombol);
+        return () => window.removeEventListener('keydown', tanganiTombol);
+      }, [tampilHasil, bukaModalSoal, sudahDijawab, soalAktif, soalBerikutnya, soalSebelumnya, pilihJawaban]);
+
+      const ubahSudut = (tipe) => {
+        setPutarOtomatis(false);
+        setSudutAktif(tipe);
+        setSudutKamera({ tipe, waktu: Date.now() });
+      };
+
+      // TAMPILAN RINGKASAN HASIL AKHIR
+      if (tampilHasil) {
+        const persentase = Math.round((totalSkor / 20) * 100);
+        return (
+          <div className="min-h-[100dvh] bg-paper dark:bg-obsidian flex flex-col justify-between p-5 sm:p-10 transition-colors duration-200 overflow-y-auto">
+            <header className="max-w-xl w-full mx-auto flex items-center justify-between pb-4 border-b border-[#DFDDD4] dark:border-[#2A2A27]">
+              <span className="font-mono text-xs font-bold uppercase tracking-widest text-stone-500">Evaluasi Spasial 3D</span>
+              <button
+                onClick={() => setTema(modeGelap ? 'terang' : 'gelap')}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[#DFDDD4] dark:border-[#2C2C29] text-xs font-semibold hover:bg-white dark:hover:bg-charcoal transition-colors"
+              >
+                <Ikon nama={modeGelap ? 'matahari' : 'bulan'} ukuran={14} />
+                {modeGelap ? 'Mode Terang' : 'Mode Gelap'}
+              </button>
+            </header>
+
+            <main className="max-w-xl w-full mx-auto my-auto py-8">
+              <p className="font-mono text-xs uppercase tracking-widest text-terracotta font-bold mb-2">Latihan Selesai</p>
+              <h1 className="text-3xl sm:text-4xl font-bold tracking-tight mb-8">Ringkasan Ketepatan Jawaban</h1>
+
+              <div className="grid grid-cols-2 border border-[#DFDDD4] dark:border-[#2C2C29] rounded-xl bg-white dark:bg-charcoal overflow-hidden mb-8">
+                <div className="p-6 border-r border-[#DFDDD4] dark:border-[#2C2C29]">
+                  <span className="block font-mono text-[11px] uppercase tracking-wider text-stone-500 mb-2">Nilai Akhir</span>
+                  <span className="font-mono text-5xl font-bold tracking-tight">{persentase}%</span>
+                </div>
+                <div className="p-6">
+                  <span className="block font-mono text-[11px] uppercase tracking-wider text-stone-500 mb-2">Jawaban Benar</span>
+                  <span className="font-mono text-5xl font-bold tracking-tight">
+                    {totalSkor}<span className="text-xl text-stone-400 font-medium">/20</span>
+                  </span>
+                </div>
+              </div>
+
+              <button
+                onClick={ulangiDenganSoalBaru}
+                className="w-full py-4 px-6 rounded-xl bg-ink dark:bg-[#F2F1ED] text-white dark:text-obsidian font-bold text-sm tracking-wide hover:opacity-90 transition-opacity flex items-center justify-center gap-2.5"
+              >
+                <Ikon nama="ulang" ukuran={17} />
+                Mulai Sesi Baru (20 Soal Acak)
+              </button>
+            </main>
+
+            <footer className="max-w-xl w-full mx-auto pt-4 border-t border-[#DFDDD4] dark:border-[#2A2A27] text-xs text-stone-500 font-mono flex justify-between">
+              <span>Geometri Bangun Ruang</span>
+              <span>React JS + WebGL</span>
+            </footer>
+          </div>
+        );
+      }
+
+      const hurufOpsi = ['A', 'B', 'C', 'D'];
+
+      return (
+        <div className="flex flex-col h-[100dvh] bg-paper dark:bg-obsidian text-ink dark:text-[#F2F1ED] overflow-hidden transition-colors duration-200">
+          
+          {/* BILAH ATAS TERPADU */}
+          <header className="h-13 sm:h-14 shrink-0 px-3.5 sm:px-6 border-b border-[#DFDDD4] dark:border-[#262624] bg-white dark:bg-charcoal flex items-center justify-between z-30">
+            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+              <span className="w-2.5 h-2.5 rounded-xs bg-terracotta inline-block shrink-0" />
+              <h1 className="text-sm sm:text-base font-bold tracking-tight truncate">Geometri Kubus 3D</h1>
+              <span className="hidden md:inline-block text-xs text-stone-400 dark:text-stone-500 font-mono border-l border-[#DFDDD4] dark:border-[#2C2C29] pl-3">
+                Latihan Penalaran Spasial
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-paper dark:bg-obsidian border border-[#E2E0D8] dark:border-[#2C2C29] font-mono text-[11px] sm:text-xs">
+                <span className="text-stone-500 hidden sm:inline">Benar:</span>
+                <span className="font-bold">{totalSkor}<span className="sm:hidden text-stone-400 font-normal">/20</span></span>
+              </div>
+
+              <button
+                onClick={() => setTema(modeGelap ? 'terang' : 'gelap')}
+                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg border border-[#E2E0D8] dark:border-[#2C2C29] hover:bg-paper dark:hover:bg-obsidian text-xs font-semibold transition-colors"
+                title={modeGelap ? 'Ubah ke Mode Terang' : 'Ubah ke Mode Gelap'}
+              >
+                <Ikon nama={modeGelap ? 'matahari' : 'bulan'} ukuran={15} />
+                <span className="hidden sm:inline">{modeGelap ? 'Terang' : 'Gelap'}</span>
+              </button>
+
+              <button
+                onClick={() => setBukaModalSoal(true)}
+                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg border border-[#E2E0D8] dark:border-[#2C2C29] hover:bg-paper dark:hover:bg-obsidian text-xs font-semibold transition-colors"
+              >
+                <Ikon nama="kotak" ukuran={15} />
+                <span>Daftar Soal</span>
+              </button>
+            </div>
+          </header>
+
+          {/* RUANG KERJA UTAMA: KIRI VISUAL 3D, KANAN LEMBAR SOAL */}
+          <div className="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-0">
+            
+            {/* KOLOM KIRI: PANGGUNG VISUALISASI 3D */}
+            <section className="lg:w-[57%] w-full h-[42%] sm:h-[45%] lg:h-full relative bg-[#EFECE6] dark:bg-[#141413] border-b lg:border-b-0 lg:border-r border-[#DFDDD4] dark:border-[#262624] flex flex-col shrink-0">
+              
+              {/* LEGENDA WARNA LAPISAN RINGKAS DI POJOK KIRI ATAS */}
+              <div className="absolute top-3 left-3 sm:top-4 sm:left-4 z-10 pointer-events-none">
+                <div className="bg-white/90 dark:bg-charcoal/90 border border-[#DFDDD4] dark:border-[#2C2C29] px-2.5 py-2 sm:px-3 sm:py-2.5 rounded-xl">
+                  <span className="block font-mono text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-stone-500 mb-1">
+                    Indikator Lapis
+                  </span>
+                  <div className="flex flex-col gap-0.5 sm:gap-1">
+                    {LAYER_PALETTE.slice(0, Math.max(2, lapisTertinggi)).map((lapis, idx) => (
+                      <div key={idx} className="flex items-center gap-1.5 sm:gap-2">
+                        <span className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-xs shrink-0" style={{ backgroundColor: lapis.css }} />
+                        <span className="text-[10px] sm:text-[11px] font-medium text-stone-700 dark:text-stone-300">{lapis.label}</span>
+                      </div>
+                    )).reverse()}
+                  </div>
+                </div>
+              </div>
+
+              {/* KANVAS WEBGL 3D (BEBAS GRID LANTAI) */}
+              <div className="flex-1 w-full h-full min-h-0">
+                <PanggungKubus3D
+                  kubus={soalAktif.kubus}
+                  putarOtomatis={putarOtomatis}
+                  modeGelap={modeGelap}
+                  sudutKamera={sudutKamera}
+                  saatGeserManual={() => setSudutAktif(null)}
+                />
+              </div>
+
+              {/* BILAH KONTROL KAMERA DI BAGIAN BAWAH PANGGUNG */}
+              <div className="shrink-0 px-3 sm:px-4 py-2 bg-white/85 dark:bg-charcoal/85 border-t border-[#DFDDD4] dark:border-[#262624] flex items-center justify-between gap-2 text-xs">
+                <div className="hidden sm:flex items-center gap-2 text-stone-500 dark:text-stone-400">
+                  <Ikon nama="geser" ukuran={14} />
+                  <span className="text-[11px] font-medium">Seret untuk memutar bangun</span>
+                </div>
+
+                <div className="flex items-center justify-between sm:justify-end w-full sm:w-auto gap-1.5">
+                  <div className="flex items-center rounded-lg border border-[#DFDDD4] dark:border-[#2C2C29] bg-paper dark:bg-obsidian p-0.5">
+                    {[
+                      { id: 'isometrik', label: 'Isometrik' },
+                      { id: 'atas', label: 'Atas' },
+                      { id: 'depan', label: 'Depan' }
+                    ].map((preset) => (
+                      <button
+                        key={preset.id}
+                        onClick={() => ubahSudut(preset.id)}
+                        className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors ${
+                          sudutAktif === preset.id
+                            ? 'bg-white dark:bg-charcoal text-ink dark:text-white shadow-2xs'
+                            : 'text-stone-500 dark:text-stone-400 hover:text-ink dark:hover:text-white'
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <button
+                    onClick={() => setPutarOtomatis(!putarOtomatis)}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] font-semibold transition-colors ${
+                      putarOtomatis
+                        ? 'bg-ink dark:bg-[#F2F1ED] text-white dark:text-obsidian border-ink dark:border-[#F2F1ED]'
+                        : 'bg-paper dark:bg-obsidian border-[#DFDDD4] dark:border-[#2C2C29] text-stone-600 dark:text-stone-300'
+                    }`}
+                  >
+                    <Ikon nama={putarOtomatis ? 'jeda' : 'putar'} ukuran={13} />
+                    <span>{putarOtomatis ? 'Putar: Aktif' : 'Putar: Jeda'}</span>
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            {/* KOLOM KANAN: LEMBAR PERTANYAAN & OPSI JAWABAN */}
+            <section className="lg:w-[43%] w-full flex-1 lg:h-full flex flex-col bg-white dark:bg-charcoal min-h-0">
+              
+              {/* GARIS PROGRES TIPIS */}
+              <div className="w-full h-1 bg-[#EAE8E1] dark:bg-[#242422] shrink-0">
+                <div
+                  className="h-full bg-terracotta transition-all duration-300"
+                  style={{ width: `${((indeksSoal + 1) / 20) * 100}%` }}
+                />
+              </div>
+
+              {/* ISI SOAL */}
+              <div ref={panelSoalRef} className="flex-1 overflow-y-auto px-5 py-5 sm:px-10 sm:py-8 custom-scrollbar">
+                <div className="flex items-center justify-between mb-4 sm:mb-6">
+                  <span className="font-mono text-xs font-bold uppercase tracking-wider text-stone-500 dark:text-stone-400">
+                    Soal {String(indeksSoal + 1).padStart(2, '0')} / 20
+                  </span>
+                  <span className="font-mono text-[11px] font-medium text-stone-400 dark:text-stone-500">
+                    {Object.keys(jawabanUser).length} Terjawab
+                  </span>
+                </div>
+
+                <h2 className="text-base sm:text-xl lg:text-[22px] font-bold leading-snug tracking-tight mb-5 sm:mb-7 select-text">
+                  {soalAktif.pertanyaan}
+                </h2>
+
+                {/* GRID PILIHAN GANDA */}
+                <div className="grid grid-cols-2 gap-2.5 sm:gap-3 mb-5 sm:mb-7">
+                  {soalAktif.pilihan.map((opsi, i) => {
+                    const iniBenar = opsi === soalAktif.jawabanBenar;
+                    const iniDipilih = opsi === jawabanUser[indeksSoal];
+
+                    let gayaTombol = "bg-paper dark:bg-obsidian border-[#DFDDD4] dark:border-[#2C2C29] hover:border-ink dark:hover:border-stone-400";
+                    let gayaHuruf = "border-[#D5D3CA] dark:border-[#363632] text-stone-500 dark:text-stone-400";
+
+                    if (sudahDijawab) {
+                      if (iniBenar) {
+                        gayaTombol = "bg-emerald-50 dark:bg-emerald-950/50 border-emerald-600 text-emerald-900 dark:text-emerald-200";
+                        gayaHuruf = "bg-emerald-600 border-emerald-600 text-white";
+                      } else if (iniDipilih) {
+                        gayaTombol = "bg-red-50 dark:bg-red-950/50 border-red-600 text-red-900 dark:text-red-200";
+                        gayaHuruf = "bg-red-600 border-red-600 text-white";
+                      } else {
+                        gayaTombol = "bg-paper/50 dark:bg-obsidian/40 border-[#EAE8E1] dark:border-[#222220] opacity-40 cursor-default";
+                      }
+                    }
+
+                    return (
+                      <button
+                        key={i}
+                        disabled={sudahDijawab}
+                        onClick={() => pilihJawaban(opsi)}
+                        className={`p-3.5 sm:p-4 rounded-xl border-2 transition-all flex items-center justify-between text-left active:scale-[0.99] ${gayaTombol}`}
+                      >
+                        <span className={`w-6 h-6 sm:w-7 sm:h-7 rounded-md border font-mono text-xs font-bold flex items-center justify-center shrink-0 ${gayaHuruf}`}>
+                          {hurufOpsi[i]}
+                        </span>
+                        <span className="font-mono text-xl sm:text-2xl font-bold">{opsi}</span>
+                        <span className="w-5 flex justify-end shrink-0">
+                          {sudahDijawab && iniBenar && <Ikon nama="benar" ukuran={18} className="text-emerald-600 dark:text-emerald-400" />}
+                          {sudahDijawab && iniDipilih && !iniBenar && <Ikon nama="salah" ukuran={18} className="text-red-600 dark:text-red-400" />}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* KOTAK PEMBAHASAN */}
+                {sudahDijawab && (
+                  <div className={`p-4 sm:p-5 rounded-xl border select-text ${
+                    jawabanTepat
+                      ? 'bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-600/30'
+                      : 'bg-red-50/70 dark:bg-red-950/30 border-red-600/30'
+                  }`}>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className={`font-mono text-xs font-bold uppercase tracking-wider ${
+                        jawabanTepat ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'
+                      }`}>
+                        {jawabanTepat ? 'Jawaban Benar' : `Jawaban Kurang Tepat (Seharusnya ${soalAktif.jawabanBenar})`}
+                      </span>
+                    </div>
+                    <p className="text-xs sm:text-sm text-stone-700 dark:text-stone-300 leading-relaxed">
+                      {soalAktif.pembahasan}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* NAVIGASI BAWAH */}
+              <footer className="shrink-0 px-4 sm:px-6 py-3 sm:py-4 border-t border-[#DFDDD4] dark:border-[#262624] bg-paper/60 dark:bg-obsidian/60 flex items-center justify-between">
+                <button
+                  onClick={soalSebelumnya}
+                  disabled={indeksSoal === 0}
+                  className="flex items-center gap-1.5 px-3 sm:px-3.5 py-2.5 rounded-lg text-xs font-bold text-stone-600 dark:text-stone-400 hover:text-ink dark:hover:text-white disabled:opacity-0 transition-all"
+                >
+                  <Ikon nama="kiri" ukuran={16} />
+                  <span>Sebelumnya</span>
+                </button>
+
+                <button
+                  onClick={soalBerikutnya}
+                  className="flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl bg-ink dark:bg-[#F2F1ED] text-white dark:text-obsidian text-xs font-bold tracking-wide hover:opacity-90 transition-opacity"
+                >
+                  <span>{indeksSoal === 19 ? 'Selesai & Lihat Nilai' : (sudahDijawab ? 'Soal Berikutnya' : 'Lewati Soal')}</span>
+                  <Ikon nama="kanan" ukuran={16} />
+                </button>
+              </footer>
+            </section>
+          </div>
+
+          {/* MODAL PETA NOMOR SOAL */}
+          <ModalDaftarSoal
+            buka={bukaModalSoal}
+            tutup={() => setBukaModalSoal(false)}
+            daftarSoal={daftarSoal}
+            indeksAktif={indeksSoal}
+            jawabanUser={jawabanUser}
+            pilihSoal={(i) => {
+              setIndeksSoal(i);
+              setBukaModalSoal(false);
+            }}
+          />
+        </div>
+      );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<AplikasiSpasial3D />);
+  </script>
+</body>
+</html>
